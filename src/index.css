@@ -1,0 +1,14 @@
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; padding: 0; background: #0a0e1a; color: #e2e8f0;
+  font-family: 'Outfit', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+#root { min-height: 100vh; }
+button { font-family: inherit; cursor: pointer; }
+input, select, textarea { font-family: inherit; }
+::placeholder { color: #4a5568; }
+.display { font-family: 'Big Shoulders Display', sans-serif; letter-spacing: 0.02em; }
+.scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+.scrollbar::-webkit-scrollbar-thumb { background: #2d3748; border-radius: 2px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 1s linear infinite; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.fade-in { animation: fadeIn 0.2s ease-out; }
