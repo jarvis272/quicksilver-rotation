@@ -3,6 +3,25 @@ import { RotateCcw, Loader, Trophy, BarChart3, Users, CheckCircle, Edit2, X } fr
 import { supabase } from './lib/supabase';
 import { SCHEDULE, getName, getResult, computeStats, computePairs, sessionProgress } from './lib/algorithm';
 
+const SKILL_COLOR = {
+  beginner: '#475569', amateur: '#64748b', intermediate: '#3b82f6',
+  intermediate_plus: '#06b6d4', advanced: '#f59e0b', pro: '#10b981',
+};
+const SKILL_LABEL = { intermediate_plus: 'Int+' };
+
+function SkillBadge({ skill }) {
+  if (!skill) return null;
+  const color = SKILL_COLOR[skill] || '#64748b';
+  const label = SKILL_LABEL[skill] || (skill.charAt(0).toUpperCase() + skill.slice(1));
+  return (
+    <span style={{ fontSize: 10, fontWeight: 700, color,
+      border: `1px solid ${color}55`, borderRadius: 4, padding: '1px 5px',
+      background: `${color}15`, whiteSpace: 'nowrap', flexShrink: 0 }}>
+      {label}
+    </span>
+  );
+}
+
 const NAVY = '#0F172A'; const GREEN = '#10b981'; const BLUE = '#1D4ED8'; const AMBER = '#B45309';
 const BLUE_BG = '#1e3a5f'; const AMBER_BG = '#3b2000';
 
@@ -71,11 +90,32 @@ export default function SessionDetail({ session, onSessionUpdated, showToast }) 
     const { error } = await supabase.from('rotation_sessions')
       .update({ closed_at: ts })
       .eq('id', session.id);
-    if (!error) {
-      setIsClosed(true);
-      onSessionUpdated?.({ ...session, closed_at: ts });
-    } else {
-      showToast('Failed to finish court', 'error');
+    if (error) { showToast('Failed to finish court', 'error'); return; }
+
+    setIsClosed(true);
+    onSessionUpdated?.({ ...session, closed_at: ts });
+
+    // Flush wins + sessions_played to the shared players table
+    const linkedPlayers = players.filter(p => p.player_id);
+    if (linkedPlayers.length > 0) {
+      const stats = computeStats(players, results);
+      const { data: playerRows } = await supabase
+        .from('players')
+        .select('id, sessions_played, rotation_wins')
+        .in('id', linkedPlayers.map(p => p.player_id));
+
+      if (playerRows?.length) {
+        await Promise.all(playerRows.map(pr => {
+          const rp = players.find(p => p.player_id === pr.id);
+          const stat = stats.find(s => s.playerNumber === rp?.player_number);
+          return supabase.from('players').update({
+            sessions_played: (pr.sessions_played || 0) + 1,
+            rotation_wins: (pr.rotation_wins || 0) + (stat?.wins || 0),
+            last_played: session.session_date,
+          }).eq('id', pr.id);
+        }));
+        showToast('Court finished · stats saved');
+      }
     }
   };
 
@@ -191,7 +231,7 @@ export default function SessionDetail({ session, onSessionUpdated, showToast }) 
           isClosed={isClosed} onFinishCourt={finishCourt}
         />
       )}
-      {tab === 'stats' && <StatsTab stats={stats} pairs={pairs} />}
+      {tab === 'stats' && <StatsTab stats={stats} pairs={pairs} players={players} />}
 
       {/* Bottom nav */}
       <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0,
@@ -352,7 +392,7 @@ function TeamChip({ nums, players, color, bg, winner, side }) {
 }
 
 // ─── STATS TAB ───────────────────────────────────────────────────────────────
-function StatsTab({ stats, pairs }) {
+function StatsTab({ stats, pairs, players }) {
   return (
     <div style={{ padding: '12px 16px' }}>
       <SectionHeader>Player Stats</SectionHeader>
@@ -365,32 +405,37 @@ function StatsTab({ stats, pairs }) {
           <span style={{textAlign:'center'}}>W</span><span style={{textAlign:'center'}}>WIN%</span>
           <span style={{textAlign:'center'}}>AVG±</span>
         </div>
-        {stats.map((p, i) => (
-          <div key={p.playerNumber} style={{
-            display: 'grid', gridTemplateColumns: '1fr 44px 44px 54px 50px',
-            gap: 0, padding: '10px 12px', fontSize: 13,
-            borderTop: i > 0 ? '1px solid #1f2937' : 'none',
-            background: i % 2 === 0 ? '#141926' : '#0f1621' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ width: 20, height: 20, borderRadius: 10,
-                background: '#0a0e1a', border: '1px solid #1f2937',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 10, fontWeight: 700, color: '#10b981', flexShrink: 0 }}>
-                {p.playerNumber}
+        {stats.map((p, i) => {
+          const rp = players?.find(pl => pl.player_number === p.playerNumber);
+          const row = (
+            <div key={p.playerNumber} style={{
+              display: 'grid', gridTemplateColumns: '1fr 44px 44px 54px 50px',
+              gap: 0, padding: '10px 12px', fontSize: 13,
+              borderTop: i > 0 ? '1px solid #1f2937' : 'none',
+              background: i % 2 === 0 ? '#141926' : '#0f1621' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                <div style={{ width: 20, height: 20, borderRadius: 10,
+                  background: '#0a0e1a', border: '1px solid #1f2937',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 10, fontWeight: 700, color: '#10b981', flexShrink: 0 }}>
+                  {p.playerNumber}
+                </div>
+                <span style={{ fontWeight: 600, color: '#e2e8f0', overflow: 'hidden',
+                  textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{p.name}</span>
+                {rp?.skill && <SkillBadge skill={rp.skill} />}
               </div>
-              <span style={{ fontWeight: 600, color: '#e2e8f0', overflow: 'hidden',
-                textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+              <span style={{ textAlign: 'center', color: '#94a3b8' }}>{p.gamesPlayed}</span>
+              <span style={{ textAlign: 'center', color: '#10b981', fontWeight: 700 }}>{p.wins}</span>
+              <span style={{ textAlign: 'center', color: '#3b82f6', fontWeight: 700 }}>
+                {p.winPct !== null ? `${p.winPct}%` : '—'}
+              </span>
+              <span style={{ textAlign: 'center', color: '#64748b', fontSize: 12 }}>
+                {p.avgMargin || '—'}
+              </span>
             </div>
-            <span style={{ textAlign: 'center', color: '#94a3b8' }}>{p.gamesPlayed}</span>
-            <span style={{ textAlign: 'center', color: '#10b981', fontWeight: 700 }}>{p.wins}</span>
-            <span style={{ textAlign: 'center', color: '#3b82f6', fontWeight: 700 }}>
-              {p.winPct !== null ? `${p.winPct}%` : '—'}
-            </span>
-            <span style={{ textAlign: 'center', color: '#64748b', fontSize: 12 }}>
-              {p.avgMargin || '—'}
-            </span>
-          </div>
-        ))}
+          );
+          return row;
+        })}
       </div>
 
       <SectionHeader>Pair Performance</SectionHeader>

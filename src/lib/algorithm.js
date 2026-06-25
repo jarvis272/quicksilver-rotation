@@ -1,3 +1,20 @@
+export const SKILL_RANK = {
+  beginner: 1, amateur: 2, intermediate: 3,
+  intermediate_plus: 4, advanced: 5, pro: 6,
+};
+
+// Sorts selected players into slots 1–6 for the given mode.
+// balanced: strongest = slot 1 (pairs strong with weak each game)
+// competitive: weakest = slot 1 (clusters strong players together)
+export function assignSlots(selectedPlayers, mode) {
+  const ranked = [...selectedPlayers].sort((a, b) => {
+    const rA = SKILL_RANK[a.skill?.toLowerCase()] ?? 3;
+    const rB = SKILL_RANK[b.skill?.toLowerCase()] ?? 3;
+    return mode === 'balanced' ? rB - rA : rA - rB;
+  });
+  return ranked.map((p, i) => ({ ...p, player_number: i + 1 }));
+}
+
 // 6-game fair rotation cycle
 // Each cycle: every player plays 4, sits 2. No 3 in a row.
 // Every player partners + faces every other player once per cycle.
